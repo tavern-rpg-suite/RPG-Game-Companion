@@ -99,7 +99,8 @@
 .rpg-game-loading { font-family: var(--rpg-type); color: #7a7263; display: flex; align-items: center; gap: 10px; font-size: 1rem; }
 
 /* Selection menu */
-.rpg-menu-container { display: flex; flex-direction: column; gap: 12px; width: 86%; max-width: 360px; }
+.rpg-menu-container { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; width: 92%; max-width: 430px; }
+.rpg-menu-container .rpg-menu-title, .rpg-menu-container .rpg-bt-hint, .rpg-menu-container .rpg-bt-cand, .rpg-menu-container #rpg-bt-start { grid-column: 1 / -1; }
 .rpg-menu-title { text-align: center; font-family: var(--rpg-type); color: #2b2924; font-size: 1.15rem; margin-bottom: 8px; }
 .rpg-game-select-btn {
     background: linear-gradient(180deg, #fffdf7, #f1e8d2);
@@ -342,3 +343,31 @@
 .rpg-whist-hand .rpg-card.selectable { cursor: pointer; transition: transform 0.12s; }
 .rpg-whist-hand .rpg-card.selectable:hover { transform: translateY(-7px); }
 .rpg-whist-hand .rpg-card.disabled { opacity: 0.4; filter: grayscale(0.4); }
+
+/* ============================================================
+   SPIN THE BOTTLE
+   ============================================================ */
+.rpg-bt-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+.rpg-bt-modes { font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.rpg-bt-mode { font-size: 12px; padding: 3px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.05); cursor: pointer; color: inherit; }
+.rpg-bt-mode.sel { border-color: #c9a227; background: rgba(201,162,39,.18); }
+.rpg-bt-circle { position: relative; width: 280px; height: 280px; border-radius: 50%; border: 2px dashed rgba(255,255,255,.15); }
+.rpg-bt-player { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 18px; text-align: center; }
+.rpg-bt-player span { font-size: 11px; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
+.rpg-bt-player.spinner span { color: #c9a227; font-weight: 600; opacity: 1; }
+.rpg-bt-player.target { filter: drop-shadow(0 0 6px rgba(233, 30, 99, .8)); }
+.rpg-bt-bottle { position: absolute; left: 50%; top: 50%; transform-origin: center; margin: -21px 0 0 -21px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 34px; color: #c9a227; transition: transform 1.7s cubic-bezier(.2, .9, .3, 1); pointer-events: none; text-shadow: 0 0 8px rgba(0,0,0,.4); }
+.rpg-bt-task { font-size: 13px; text-align: center; max-width: 340px; opacity: .9; min-height: 18px; }
+.rpg-bt-task.hot { padding: 8px 12px; border-radius: 10px; background: rgba(233, 30, 99, .12); border: 1px solid rgba(233, 30, 99, .4); opacity: 1; }
+.rpg-bt-hint { font-size: 12px; opacity: .7; margin-bottom: 8px; text-align: center; }
+.rpg-bt-cand { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin: 3px 0; border-radius: 8px; background: rgba(255,255,255,.05); cursor: pointer; width: 100%; }
+.rpg-bt-cand:hover { background: rgba(255,255,255,.1); }
+.rpg-bt-say { font-size: 12px; font-style: italic; text-align: center; max-width: 340px; opacity: .9; padding: 4px 10px; border-left: 2px solid rgba(233, 30, 99, .5); }
+
+/* compact game-select cards for the 2-column menu */
+.rpg-menu-container .rpg-game-select-btn { padding: 9px 10px; font-size: 0.82rem; gap: 7px; }
+
+/* smaller, softer action buttons on the bottle screen */
+.rpg-bt-wrap .rpg-bj-controls { gap: 7px; flex-wrap: wrap; justify-content: center; margin-top: 2px; }
+.rpg-bt-wrap .rpg-game-action-btn { padding: 5px 12px; font-size: 0.76rem; border-radius: 15px; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.18); }
+.rpg-bt-wrap .rpg-game-action-btn i { font-size: 0.72rem; }

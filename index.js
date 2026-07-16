@@ -85,6 +85,25 @@ const I18N = {
         result_added: 'Result added to the input field — press Send.',
         gn_ttt: 'Tic-Tac-Toe', gn_bs: 'Battleship', gn_chess: 'Chess', gn_bj: '21 (Blackjack)',
         gn_rps: 'Rock-Paper-Scissors', gn_poker: 'Poker', gn_pig: 'Dice', gn_whist: 'Whist',
+        g_bottle: 'Spin the Bottle 💋', gn_bottle: 'spin-the-bottle',
+        bt_pick_title: 'Who joins the bottle circle?',
+        bt_pick_hint: 'Pick up to 5 characters — the bottle can land on anyone, dares are played out in chat.',
+        bt_start: 'Sit in the circle',
+        bt_mode: 'Mode:', bt_mode_kiss: '💋 Kisses', bt_mode_wish: '✨ Wishes', bt_mode_mix: '🎲 Mixed',
+        bt_your_turn: 'Your turn — spin the bottle!',
+        bt_turn: '{name} reaches for the bottle…',
+        bt_spin: 'Spin!',
+        bt_spinning: '{name} spins the bottle…',
+        bt_points: 'The bottle points at {target}!',
+        bt_task_kiss: '{spinner} kisses {target}.',
+        bt_wish_gen: 'Thinking of a dare…',
+        bt_task_wish: 'Dare from {spinner} to {target}: «{dare}»',
+        bt_reroll: '🎲 Another dare',
+        bt_insert: '▶ Play this out in chat',
+        bt_next: 'Next ▶',
+        bt_line_kiss: '*[Spin the bottle: {spinner}\'s bottle points at {target} — a kiss! Play the scene out.]*',
+        bt_line_wish: '*[Spin the bottle: {spinner}\'s bottle points at {target}. Dare: «{dare}». Play the scene out.]*',
+        bt_inserted: 'Scene added to the input field — press Send.',
         res_draw: 'in a draw', res_user: 'in my favor', res_bot: "in {name}'s favor",
         summary_line: '*{user} and {char} played a game of {game}. It ended {result}.*',
         hand_0: 'High Card', hand_1: 'Pair', hand_2: 'Two Pair', hand_3: 'Three of a Kind', hand_4: 'Straight',
@@ -157,6 +176,25 @@ const I18N = {
         result_added: 'Результат добавлен в поле ввода — нажми «Отправить».',
         gn_ttt: 'крестики-нолики', gn_bs: 'морской бой', gn_chess: 'шахматы', gn_bj: '21 (блэкджек)',
         gn_rps: 'камень-ножницы-бумага', gn_poker: 'покер', gn_pig: 'кости', gn_whist: 'вист',
+        g_bottle: 'Бутылочка 💋', gn_bottle: 'бутылочку',
+        bt_pick_title: 'Кто садится в круг бутылочки?',
+        bt_pick_hint: 'Выбери до 5 персонажей — бутылочка может указать на любого, задания отыгрываются в чате.',
+        bt_start: 'Сесть в круг',
+        bt_mode: 'Режим:', bt_mode_kiss: '💋 Поцелуи', bt_mode_wish: '✨ Желания', bt_mode_mix: '🎲 Вперемешку',
+        bt_your_turn: 'Твой ход — крути бутылочку!',
+        bt_turn: '{name} тянется к бутылочке…',
+        bt_spin: 'Крутить!',
+        bt_spinning: '{name} крутит бутылочку…',
+        bt_points: 'Бутылочка указывает на {target}!',
+        bt_task_kiss: '{spinner} целует {target}.',
+        bt_wish_gen: 'Придумываю желание…',
+        bt_task_wish: 'Желание от {spinner} для {target}: «{dare}»',
+        bt_reroll: '🎲 Другое желание',
+        bt_insert: '▶ Отыграть в чате',
+        bt_next: 'Дальше ▶',
+        bt_line_kiss: '*[Бутылочка: бутылочка {spinner} указывает на {target} — поцелуй! Отыграйте эту сцену.]*',
+        bt_line_wish: '*[Бутылочка: бутылочка {spinner} указывает на {target}. Желание: «{dare}». Отыграйте эту сцену.]*',
+        bt_inserted: 'Сцена добавлена в поле ввода — нажми «Отправить».',
         res_draw: 'вничью', res_user: 'в мою пользу', res_bot: 'в пользу {name}',
         summary_line: '*{user} и {char} сыграли в {game}. Партия закончилась {result}.*',
         hand_0: 'Старшая карта', hand_1: 'Пара', hand_2: 'Две пары', hand_3: 'Тройка', hand_4: 'Стрит',
@@ -196,7 +234,9 @@ let gameState = {
     // Dice (Pig)
     pig: null,
     // Whist
-    whist: null
+    whist: null,
+    // Spin the Bottle
+    bottle: null
 };
 
 const CHESS_PIECE_SYMBOLS = {
@@ -205,6 +245,15 @@ const CHESS_PIECE_SYMBOLS = {
 };
 
 let chessInstance = null;
+
+// A surrendered/replaced game can leave bot-turn timers pending; without this, a stale
+// blackjack dealerPlay ended a FRESH hand instantly, a stale battleship botBsTurn shot
+// during the player's turn, and a stale chess timer moved the PLAYER's pieces.
+let gameSession = 0;
+function guarded(fn) {
+    const sess = gameSession;
+    return (...a) => { if (sess !== gameSession || !gameState.active) return; fn(...a); };
+}
 
 function loadChessScript() {
     if (typeof Chess === 'undefined') {
@@ -282,7 +331,7 @@ Output ONLY JSON: {"mode":"fair","skill":3,"reason":"..."}`;
 
 // === AI COMMENTATOR ===
 let lastCommentAt = 0;
-async function generateAiCommentary(gameEvent, force = false) {
+async function generateAiCommentary(gameEvent, force = false, speaker = null) {
     if (!settings.apiKey) return;
     const now = Date.now();
     if (!force) {
@@ -291,12 +340,13 @@ async function generateAiCommentary(gameEvent, force = false) {
     }
     lastCommentAt = now;
     const context = getContext();
-    const charName = gameState.opponentName;
+    const charName = speaker || gameState.opponentName;   // in the bottle circle several characters can speak
     const num = Math.min(settings.contextMessages || 10, context.chat.length);
     const mainHistory = context.chat.slice(-num).filter(m => !m.is_system).map(m => `${m.name}: ${m.mes}`).join('\n\n');
-    const gameHistoryText = gameState.chatLog.slice(-5).map(m => `${m.sender === 'user' ? userName() : charName}: ${m.text}`).join('\n');
+    const gameHistoryText = gameState.chatLog.slice(-5).map(m => `${m.sender === 'user' ? userName() : (m.who || charName)}: ${m.text}`).join('\n');
 
-    const moodHint = gameState.disposition.mode === 'cheat'
+    const moodHint = (speaker && speaker !== gameState.opponentName) ? 'Play it straight and natural.'
+        : gameState.disposition.mode === 'cheat'
         ? 'Secretly you are bending the rules to win — act sly/confident, but NEVER openly admit cheating.'
         : gameState.disposition.mode === 'throw'
             ? 'Secretly you are letting them win — be warm/playful/encouraging, but NEVER admit you are throwing the game.'
@@ -323,7 +373,8 @@ Rules:
     try {
         const comment = await callApi([{ role: 'system', content: systemPrompt }], { maxTokens: 100 });
         removeTypingIndicator();
-        if (comment) addGameChatMessage('bot', comment);
+        if (comment) addGameChatMessage('bot', comment, charName);
+        return comment || null;
     } catch (e) {
         removeTypingIndicator();
         console.error("Commentary error:", e);
@@ -332,6 +383,7 @@ Rules:
 
 // === GAME START (with hidden difficulty) ===
 async function startGame(type) {
+    gameSession++;                     // invalidate any timers from the previous game
     gameState.active = true;
     gameState.gameType = type;
     gameState.winner = null;
@@ -351,14 +403,25 @@ async function startGame(type) {
     else if (type === 'poker') initPoker();
     else if (type === 'pig') initPig();
     else if (type === 'whist') initWhist();
+    else if (type === 'bottle') initBottle();
 }
 
 /* ============================================================
    CHESS
    ============================================================ */
+let chessLoadTries = 0;
 function initChessGame() {
     loadChessScript();
-    if (typeof Chess === 'undefined') { setTimeout(initChessGame, 120); return; }
+    if (typeof Chess === 'undefined') {
+        // no CDN access (offline SillyTavern) used to leave "getting ready…" spinning forever
+        if (++chessLoadTries > 50) {
+            chessLoadTries = 0;
+            toastr.error('chess.js could not be loaded (no access to cdnjs.cloudflare.com?)');
+            gameState.active = false; renderGameArea(); return;
+        }
+        setTimeout(initChessGame, 150); return;
+    }
+    chessLoadTries = 0;
     chessInstance = new Chess();
     gameState.selectedSquare = null;
     gameState.turn = 'user';
@@ -412,7 +475,7 @@ function handleChessClick(squareName) {
             renderGameArea();
             if (chessInstance.game_over()) { resolveChessWinner(); return; }
             gameState.turn = 'bot';
-            setTimeout(() => {
+            setTimeout(guarded(() => {
                 const moves = chessInstance.moves({ verbose: true });
                 const selectedMove = pickChessMove(moves);
                 if (selectedMove) {
@@ -422,7 +485,7 @@ function handleChessClick(squareName) {
                     gameState.turn = 'user';
                     generateAiCommentary(`${userName()} moved. You replied with ${selectedMove.san}. Now it's ${userName()}'s turn.`);
                 }
-            }, 900);
+            }), 900);
         } else {
             gameState.selectedSquare = (piece && piece.color === 'w') ? squareName : null;
             renderGameArea();
@@ -508,7 +571,7 @@ function handleTttClick(index) {
     renderGameArea();
     if (checkTttWinner()) { resolveGame(); return; }
     gameState.turn = 'bot';
-    setTimeout(async () => {
+    setTimeout(guarded(async () => {
         const botMove = pickTttMove();
         if (botMove !== null && botMove !== undefined) {
             gameState.tttBoard[botMove] = 'O';
@@ -517,7 +580,7 @@ function handleTttClick(index) {
             gameState.turn = 'user';
             await generateAiCommentary(`${userName()} made a move. You placed an 'O'.`);
         } else { gameState.winner = 'draw'; resolveGame(); }
-    }, 800);
+    }), 800);
 }
 
 function checkTttWinner() {
@@ -571,7 +634,7 @@ async function handleBsClick(index) {
         gameState.turn = 'bot';
         addGameChatMessage('system', t('bs_miss_turn', {name: gameState.opponentName}));
         await generateAiCommentary(`${userName()} fired and MISSED.`);
-        setTimeout(botBsTurn, 1000);
+        setTimeout(guarded(botBsTurn), 1000);
     }
 }
 
@@ -616,7 +679,7 @@ async function botBsTurn() {
         addGameChatMessage('system', t('bs_opp_hit'));
         if (!gameState.bsUserGrid.includes('ship')) { gameState.winner = 'bot'; resolveGame(); return; }
         await generateAiCommentary(`You fired and HIT ${userName()}'s ship!`);
-        setTimeout(botBsTurn, 1000);
+        setTimeout(guarded(botBsTurn), 1000);
     } else {
         addGameChatMessage('system', t('bs_opp_miss'));
         gameState.turn = 'user';
@@ -651,7 +714,7 @@ function initBlackjack() {
     gameState.winner = null;
     addGameChatMessage('system', t('bj_start', {name: gameState.opponentName}));
     renderGameArea();
-    if (handValue(gameState.playerCards) === 21) { gameState.blackjackPhase = 'dealer'; setTimeout(dealerPlay, 700); }
+    if (handValue(gameState.playerCards) === 21) { gameState.blackjackPhase = 'dealer'; setTimeout(guarded(dealerPlay), 700); }
 }
 
 function bjHit() {
@@ -673,7 +736,7 @@ function bjStand() {
     gameState.blackjackPhase = 'dealer';
     addGameChatMessage('system', t('bj_reveal', {name: gameState.opponentName}));
     renderGameArea();
-    setTimeout(dealerPlay, 700);
+    setTimeout(guarded(dealerPlay), 700);
 }
 
 function dealerPlay() {
@@ -879,11 +942,11 @@ function pokerBet(action) {
         p.playerChips -= amt; p.pot += amt;
         addGameChatMessage('system', t('poker_you_bet', {amt}));
         p.phase = 'wait'; renderGameArea();
-        setTimeout(() => pokerAiVsBet(amt), 650);
+        setTimeout(guarded(() => pokerAiVsBet(amt)), 650);
     } else {
         addGameChatMessage('system', t('poker_you_check'));
         p.phase = 'wait'; renderGameArea();
-        setTimeout(pokerAiVsCheck, 650);
+        setTimeout(guarded(pokerAiVsCheck), 650);
     }
 }
 function pokerAiVsCheck() {
@@ -970,7 +1033,7 @@ function pigRoll() {
         pig.message = t('pig_you_one');
         pig.phase = 'bot';
         renderGameArea();
-        setTimeout(botPigTurn, 900);
+        setTimeout(guarded(botPigTurn), 900);
     } else {
         pig.turnTotal += roll;
         pig.message = t('pig_you_roll', {roll, total: pig.turnTotal});
@@ -986,7 +1049,7 @@ function pigBank() {
     if (pig.playerScore >= pig.target) { gameState.winner = 'user'; pig.phase = 'over'; renderGameArea(); resolveGame(); return; }
     pig.phase = 'bot';
     renderGameArea();
-    setTimeout(botPigTurn, 800);
+    setTimeout(guarded(botPigTurn), 800);
 }
 function botRollDie() {
     const d = gameState.disposition.mode;
@@ -1007,7 +1070,7 @@ function botPigTurn() {
     pig.turnTotal = 0;
     pig.message = t('pig_opp_pickup', {name: gameState.opponentName});
     renderGameArea();
-    setTimeout(botPigStep, 700);
+    setTimeout(guarded(botPigStep), 700);
 }
 function botPigStep() {
     const pig = gameState.pig;
@@ -1040,7 +1103,7 @@ function botPigStep() {
     pig.turnTotal += roll;
     pig.message = t('pig_opp_roll', {name: gameState.opponentName, roll, total: pig.turnTotal});
     renderGameArea();
-    setTimeout(botPigStep, 850);
+    setTimeout(guarded(botPigStep), 850);
 }
 
 /* ============================================================
@@ -1084,7 +1147,7 @@ function whistPlayerPlay(index) {
         w.ledSuit = card.suit; w.table.user = card; whistRemove(w.playerHand, card);
         w.turn = 'bot'; w.message = t('whist_you_led', {card: card.rank + card.suit});
         renderGameArea();
-        setTimeout(botWhistFollow, 750);
+        setTimeout(guarded(botWhistFollow), 750);
     }
 }
 
@@ -1126,12 +1189,12 @@ function resolveWhistTrick() {
     w.message = winner === 'user' ? t('whist_trick_you') : t('whist_trick_opp', {name: gameState.opponentName});
     renderGameArea();
     generateAiCommentary(`Whist trick won by ${winner === 'user' ? userName() : 'you'}. Tricks ${userName()} ${w.playerTricks} : ${w.botTricks} you.`);
-    setTimeout(() => {
+    setTimeout(guarded(() => {
         w.table.user = null; w.table.bot = null; w.ledSuit = null;
         if (w.playerHand.length === 0 && w.botHand.length === 0) { finishWhist(); return; }
-        if (winner === 'bot') { w.turn = 'bot'; renderGameArea(); setTimeout(botWhistLead, 650); }
+        if (winner === 'bot') { w.turn = 'bot'; renderGameArea(); setTimeout(guarded(botWhistLead), 650); }
         else { w.turn = 'user'; w.message = t('your_turn'); renderGameArea(); }
-    }, 1000);
+    }), 1000);
 }
 
 function finishWhist() {
@@ -1142,6 +1205,226 @@ function finishWhist() {
     renderGameArea();
     resolveGame();
     generateAiCommentary(`Whist game over. Tricks ${userName()} ${w.playerTricks}, you ${w.botTricks}. Winner: ${gameState.winner === 'user' ? userName() : (gameState.winner === 'bot' ? 'you' : 'a tie')}.`, true);
+}
+
+
+/* ============================================================
+   SPIN THE BOTTLE — a party game for the whole group chat.
+   The widget decides WHO and WHAT; the scene itself is played out
+   in the main chat via the "play this out" line.
+   ============================================================ */
+const TABLE_TOKENS = ['🔵', '🔴', '🟢', '🟡', '🟣', '🟠'];
+
+// candidates for the circle: every member of the group (spoken or silent),
+// plus anyone who has actually talked in this chat, plus the current opponent
+function groupAiNames() {
+    const ctx = getContext();
+    const seen = new Set();
+    if (ctx.groupId) {
+        const groups = ctx.groups || (typeof window !== 'undefined' && window.groups) || [];
+        const g = (groups || []).find(x => String(x.id) === String(ctx.groupId));
+        if (g && Array.isArray(g.members)) {
+            g.members.forEach(m => {
+                const ch = characters.find(c => c.avatar === m) || characters.find(c => c.name === m);
+                if (ch && ch.name) seen.add(ch.name);
+            });
+        }
+    }
+    (ctx.chat || []).forEach(m => {
+        if (!m.is_user && !m.is_system && m.name && characters.some(c => c.name === m.name)) seen.add(m.name);
+    });
+    if (gameState.opponentName) seen.add(gameState.opponentName);
+    return [...seen];
+}
+
+function initBottle() {
+    const ctx = getContext();
+    const cands = groupAiNames();
+    if (ctx.groupId && cands.length > 1) { renderBottlePicker(cands); return; }
+    bottleStart([gameState.opponentName]);
+}
+
+function renderBottlePicker(cands) {
+    const canvas = $('#rpg-game-canvas');
+    canvas.empty();
+    canvas.append(`<button class="rpg-back-btn" id="rpg-bt-back"><i class="fa-solid fa-arrow-left"></i> ${t('menu')}</button>`);
+    $('#rpg-bt-back').on('click', () => { gameSession++; gameState.active = false; gameState.chatLog = []; renderGameArea(); });
+    const wrap = $('<div class="rpg-menu-container"></div>');
+    wrap.append(`<div class="rpg-menu-title">${t('bt_pick_title')}</div><div class="rpg-bt-hint">${t('bt_pick_hint')}</div>`);
+    cands.forEach((n, i) => wrap.append(`<label class="rpg-bt-cand"><input type="checkbox" data-i="${i}" ${n === gameState.opponentName ? 'checked' : ''}> ${escapeHtml(n)}</label>`));
+    wrap.append(`<button class="rpg-game-select-btn" id="rpg-bt-start"><i class="fa-solid fa-play"></i> ${t('bt_start')}</button>`);
+    canvas.append(wrap);
+    $('#rpg-bt-start').on('click', () => {
+        const chosen = [];
+        wrap.find('input:checked').each(function () { const n = cands[parseInt($(this).data('i'))]; if (n) chosen.push(n); });
+        if (!chosen.length) chosen.push(gameState.opponentName);
+        bottleStart(chosen.slice(0, 5));
+    });
+}
+
+function bottleStart(aiNames) {
+    gameSession++;
+    const players = [{ name: userName(), isUser: true, token: TABLE_TOKENS[0] }];
+    aiNames.slice(0, 5).forEach((n, i) => players.push({ name: n, isUser: false, token: TABLE_TOKENS[(i + 1) % TABLE_TOKENS.length] }));
+    gameState.bottle = { players, turn: 0, mode: 'mix', phase: 'idle', target: null, task: '', dare: '', kind: null, angle: 0, round: 0 };
+    gameState.winner = null;
+    renderGameArea();
+}
+
+function bottleSpin() {
+    const b = gameState.bottle;
+    if (!b || b.phase !== 'idle' || gameState.winner) return;
+    const spinner = b.players[b.turn];
+    b.round++;
+    // anyone but the spinner
+    const others = b.players.map((p, i) => i).filter(i => i !== b.turn);
+    const targetIdx = others[Math.floor(Math.random() * others.length)];
+    b.target = targetIdx;
+    // the pointer must stop exactly on the target's seat (plus a wobble)
+    const n = b.players.length;
+    const targetAngle = -90 + targetIdx * (360 / n);
+    b.angle = (b.angle || 0) + 1080 + ((targetAngle - ((b.angle || 0) % 360)) + 360) % 360 + (Math.random() * 18 - 9);
+    b.phase = 'spinning';
+    b.task = ''; b.dare = ''; b.kind = null;
+    addGameChatMessage('system', t('bt_spinning', { name: spinner.name }));
+    renderGameArea();
+    setTimeout(guarded(bottleResolve), 1800);
+}
+
+function bottleResolve() {
+    const b = gameState.bottle;
+    if (!b || b.phase !== 'spinning') return;
+    const spinner = b.players[b.turn], target = b.players[b.target];
+    b.phase = 'result';
+    b.reaction = null;
+    addGameChatMessage('system', t('bt_points', { target: target.name }));
+    b.kind = b.mode === 'mix' ? (Math.random() < 0.5 ? 'kiss' : 'wish') : b.mode;
+    if (b.kind === 'kiss') {
+        b.task = t('bt_task_kiss', { spinner: spinner.name, target: target.name });
+        addGameChatMessage('system', b.task);
+        bottleReactions(spinner, target);
+        renderGameArea();
+    } else {
+        b.task = t('bt_wish_gen');
+        renderGameArea();
+        bottleMakeDare();
+    }
+}
+
+// the dare is invented by the AI to fit the characters and the current scene —
+// playful/flirty party stuff that can actually be ACTED OUT in roleplay
+async function bottleMakeDare() {
+    const b = gameState.bottle;
+    const myRound = b.round;
+    const spinner = b.players[b.turn], target = b.players[b.target];
+    let dare = '';
+    try {
+        const context = getContext();
+        const num = Math.min(settings.contextMessages || 10, context.chat.length);
+        const recent = context.chat.slice(-num).filter(m => !m.is_system).map(m => `${m.name}: ${m.mes}`).join('\n').slice(-1500);
+        const sys = `A party game of spin-the-bottle is being played among story characters. ${spinner.name} spun the bottle and it points at ${target.name}.
+Invent ONE short playful dare that ${spinner.name} asks of ${target.name} — flirty, sweet or funny, fitting both characters and the scene below, and something that can be ACTED OUT in roleplay (a kiss on the cheek, a compliment, a slow dance, a confession, singing a verse…). Keep it light and in the spirit of a party game. One sentence, in ${langName()}.
+Scene:\n${recent}
+Output ONLY JSON: {"dare":""}`;
+        const raw = await callApi([{ role: 'system', content: sys }], { json: true, maxTokens: 120 });
+        const m = raw.match(/\{[\s\S]*\}/);
+        const res = JSON.parse(m ? m[0] : raw);
+        dare = String(res && res.dare || '').trim().slice(0, 180);
+    } catch (e) { console.error('[RPG Game] dare error:', e); }
+    if (!gameState.active || gameState.gameType !== 'bottle' || !gameState.bottle || gameState.bottle.round !== myRound) return;
+    if (!dare) dare = t('bt_task_kiss', { spinner: spinner.name, target: target.name });   // fallback: a classic
+    b.dare = dare;
+    b.reaction = null;                     // the old quip may not fit the new dare
+    b.task = t('bt_task_wish', { spinner: spinner.name, target: target.name, dare });
+    addGameChatMessage('system', b.task);
+    bottleReactions(spinner, target);
+    renderGameArea();
+}
+
+// the pointed character (or the AI spinner) quips in the table chat, in character —
+// and the line is KEPT so "play this out in chat" carries it into the roleplay too
+async function bottleReactions(spinner, target) {
+    const b = gameState.bottle;
+    const myRound = b.round;
+    const what = b.kind === 'kiss' ? 'a kiss' : `the dare: "${b.dare || '…'}"`;
+    let who = null, text = null;
+    if (!target.isUser) {
+        who = target.name;
+        text = await generateAiCommentary(`In spin-the-bottle, ${spinner.name}'s bottle just pointed at YOU. The task is ${what}. One short in-character reaction (blush, tease, bravado — whatever fits you).`, true, target.name);
+    } else if (!spinner.isUser) {
+        who = spinner.name;
+        text = await generateAiCommentary(`In spin-the-bottle, YOUR bottle just pointed at ${target.name}. The task is ${what}. One short in-character line to them.`, true, spinner.name);
+    }
+    if (!text) return;
+    const bb = gameState.bottle;
+    if (!gameState.active || gameState.gameType !== 'bottle' || !bb || bb.round !== myRound) return;   // stale round
+    bb.reaction = { who, text: String(text).trim() };
+    renderGameArea();   // show the quote under the task so it's clear it will be sent along
+}
+
+function bottleInsertScene() {
+    const b = gameState.bottle;
+    if (!b || b.phase !== 'result') return;
+    const spinner = b.players[b.turn], target = b.players[b.target];
+    let line = b.kind === 'kiss'
+        ? t('bt_line_kiss', { spinner: spinner.name, target: target.name })
+        : t('bt_line_wish', { spinner: spinner.name, target: target.name, dare: b.dare || '…' });
+    if (b.reaction && b.reaction.text) line += `\n${b.reaction.who}: «${b.reaction.text}»`;
+    const cur = $('#send_textarea').val();
+    $('#send_textarea').val((cur ? cur + '\n\n' : '') + line).trigger('input');
+    toastr.success(t('bt_inserted'));
+}
+
+function bottleNext() {
+    const b = gameState.bottle;
+    if (!b || b.phase !== 'result') return;
+    b.turn = (b.turn + 1) % b.players.length;
+    b.phase = 'idle'; b.target = null; b.task = ''; b.dare = ''; b.kind = null; b.reaction = null;
+    renderGameArea();
+    const p = b.players[b.turn];
+    if (!p.isUser) setTimeout(guarded(bottleSpin), 1100);   // AI players spin on their own
+}
+
+function renderBottleArea(canvas) {
+    const b = gameState.bottle; if (!b) return;
+    const wrap = $('<div class="rpg-bt-wrap"></div>');
+    // mode switch
+    wrap.append(`<div class="rpg-bt-modes">${t('bt_mode')} ` + ['kiss', 'wish', 'mix'].map(m =>
+        `<button class="rpg-bt-mode ${b.mode === m ? 'sel' : ''}" data-m="${m}">${t('bt_mode_' + m)}</button>`).join('') + `</div>`);
+    // the circle
+    const n = b.players.length, R = 108, C = 140;
+    const circle = $('<div class="rpg-bt-circle"></div>');
+    b.players.forEach((p, i) => {
+        const a = (-90 + i * 360 / n) * Math.PI / 180;
+        const x = C + R * Math.cos(a), y = C + R * Math.sin(a);
+        const cls = (i === b.turn ? 'spinner' : '') + (b.phase !== 'spinning' && i === b.target ? ' target' : '');
+        circle.append(`<div class="rpg-bt-player ${cls}" style="left:${Math.round(x)}px;top:${Math.round(y)}px;">${p.token}<span>${escapeHtml(p.name)}</span></div>`);
+    });
+    circle.append(`<div class="rpg-bt-bottle" style="transform:rotate(${b.angle}deg)">➤</div>`);
+    wrap.append(circle);
+    // status / task
+    const cur = b.players[b.turn];
+    if (b.phase === 'idle') wrap.append(`<div class="rpg-bt-task">${escapeHtml(cur.isUser ? t('bt_your_turn') : t('bt_turn', { name: cur.name }))}</div>`);
+    else if (b.phase === 'spinning') wrap.append(`<div class="rpg-bt-task">${escapeHtml(t('bt_spinning', { name: cur.name }))}</div>`);
+    else if (b.task) {
+        wrap.append(`<div class="rpg-bt-task hot">${escapeHtml(b.task)}</div>`);
+        if (b.reaction && b.reaction.text) wrap.append(`<div class="rpg-bt-say"><b>${escapeHtml(b.reaction.who)}:</b> «${escapeHtml(b.reaction.text)}»</div>`);
+    }
+    // controls
+    const ctrl = $('<div class="rpg-bj-controls"></div>');
+    if (b.phase === 'idle' && cur.isUser) ctrl.append(`<button class="rpg-game-action-btn" id="rpg-bt-spin"><i class="fa-solid fa-rotate"></i> ${t('bt_spin')}</button>`);
+    if (b.phase === 'result') {
+        ctrl.append(`<button class="rpg-game-action-btn" id="rpg-bt-insert"><i class="fa-solid fa-paper-plane"></i> ${t('bt_insert')}</button>`);
+        if (b.kind === 'wish') ctrl.append(`<button class="rpg-game-action-btn alt" id="rpg-bt-reroll">${t('bt_reroll')}</button>`);
+        ctrl.append(`<button class="rpg-game-action-btn alt" id="rpg-bt-next">${t('bt_next')}</button>`);
+    }
+    wrap.append(ctrl);
+    canvas.append(wrap);
+    wrap.find('.rpg-bt-mode').on('click', function () { b.mode = $(this).data('m'); renderGameArea(); });
+    $('#rpg-bt-spin').on('click', bottleSpin);
+    $('#rpg-bt-insert').on('click', bottleInsertScene);
+    $('#rpg-bt-next').on('click', bottleNext);
+    $('#rpg-bt-reroll').on('click', () => { const bb = gameState.bottle; if (bb && bb.phase === 'result') { bb.task = t('bt_wish_gen'); bb.reaction = null; renderGameArea(); bottleMakeDare(); } });
 }
 
 /* ============================================================
@@ -1172,7 +1455,7 @@ function renderGameArea() {
     if (!gameState.active) {
         canvas.html(`
             <div class="rpg-menu-container">
-                <div class="rpg-menu-title">${t('menu_title', {name: gameState.opponentName})}</div>
+                <div class="rpg-menu-title">${t('menu_title', {name: escapeHtml(gameState.opponentName)})}</div>
                 <button class="rpg-game-select-btn" data-game="chess"><i class="fa-solid fa-chess"></i> ${t('g_chess')}</button>
                 <button class="rpg-game-select-btn" data-game="bj"><i class="fa-solid fa-clone"></i> ${t('g_bj')}</button>
                 <button class="rpg-game-select-btn" data-game="poker"><i class="fa-solid fa-diamond"></i> ${t('g_poker')}</button>
@@ -1181,6 +1464,7 @@ function renderGameArea() {
                 <button class="rpg-game-select-btn" data-game="ttt"><i class="fa-solid fa-hashtag"></i> ${t('g_ttt')}</button>
                 <button class="rpg-game-select-btn" data-game="rps"><i class="fa-solid fa-hand-scissors"></i> ${t('g_rps')}</button>
                 <button class="rpg-game-select-btn" data-game="pig"><i class="fa-solid fa-dice"></i> ${t('g_pig')}</button>
+                <button class="rpg-game-select-btn" data-game="bottle"><i class="fa-solid fa-wine-bottle"></i> ${t('g_bottle')}</button>
             </div>
         `);
         $('.rpg-game-select-btn[data-game]').on('click', function () { startGame($(this).data('game')); });
@@ -1192,11 +1476,13 @@ function renderGameArea() {
         <button class="rpg-surrender-btn" id="rpg-surrender-btn"><i class="fa-solid fa-flag"></i> ${t('surrender')}</button>
     `);
     $('#rpg-back-btn').on('click', () => {
+        gameSession++;                 // kill pending bot-turn timers
         gameState.active = false;
         gameState.chatLog = [];
         renderGameArea();
     });
     $('#rpg-surrender-btn').on('click', () => {
+        gameSession++;                 // kill pending bot-turn timers
         addGameChatMessage('system', t('surrendered'));
         gameState.active = false;
         gameState.chatLog = [];
@@ -1256,7 +1542,7 @@ function renderGameArea() {
         const wrap = $('<div class="rpg-bj-wrap"></div>');
         wrap.append(`
             <div class="rpg-bj-side">
-                <div class="rpg-bj-label">${gameState.opponentName} · <b>${dvShown}</b></div>
+                <div class="rpg-bj-label">${escapeHtml(gameState.opponentName)} · <b>${dvShown}</b></div>
                 <div class="rpg-bj-cards">${gameState.dealerCards.map((c, i) => cardHtml(c, hideHole && i > 0)).join('')}</div>
             </div>
             <div class="rpg-bj-side">
@@ -1278,8 +1564,8 @@ function renderGameArea() {
     }
     else if (gameState.gameType === 'rps') {
         const wrap = $('<div class="rpg-rps-wrap"></div>');
-        wrap.append(`<div class="rpg-rps-score">${t('you')} <b>${gameState.rpsPlayerScore}</b> : <b>${gameState.rpsBotScore}</b> ${gameState.opponentName}</div>`);
-        if (gameState.rpsLast) wrap.append(`<div class="rpg-rps-last">${gameState.rpsLast}</div>`);
+        wrap.append(`<div class="rpg-rps-score">${t('you')} <b>${gameState.rpsPlayerScore}</b> : <b>${gameState.rpsBotScore}</b> ${escapeHtml(gameState.opponentName)}</div>`);
+        if (gameState.rpsLast) wrap.append(`<div class="rpg-rps-last">${escapeHtml(gameState.rpsLast)}</div>`);
         if (!gameState.winner) {
             wrap.append(`
                 <div class="rpg-rps-choices">
@@ -1298,12 +1584,12 @@ function renderGameArea() {
         const wrap = $('<div class="rpg-poker-wrap"></div>');
         wrap.append(`
             <div class="rpg-poker-side">
-                <div class="rpg-poker-label">${gameState.opponentName} · 🪙 ${p.botChips}${reveal ? ` · ${handName(p.botHand)}` : ''}</div>
+                <div class="rpg-poker-label">${escapeHtml(gameState.opponentName)} · 🪙 ${p.botChips}${reveal ? ` · ${handName(p.botHand)}` : ''}</div>
                 <div class="rpg-bj-cards">${p.botHand.map(c => cardHtml(c, !reveal)).join('')}</div>
             </div>
             <div class="rpg-poker-pot">Pot: 🪙 ${p.pot}</div>
         `);
-        if (p.handResult) wrap.append(`<div class="rpg-poker-result">${p.handResult}</div>`);
+        if (p.handResult) wrap.append(`<div class="rpg-poker-result">${escapeHtml(p.handResult)}</div>`);
         const phand = $(`<div class="rpg-poker-side"><div class="rpg-poker-label">${t('you')} · 🪙 ${p.playerChips}${reveal ? ` · ${handName(p.playerHand)}` : ''}</div></div>`);
         const pcards = $('<div class="rpg-bj-cards"></div>');
         p.playerHand.forEach((c, i) => {
@@ -1341,12 +1627,12 @@ function renderGameArea() {
             <div class="rpg-pig-scores">
                 <span class="${pig.phase === 'player' ? 'turn' : ''}">${t('you')} · <b>${pig.playerScore}</b></span>
                 <span class="rpg-pig-target">${t('pig_to', {target: pig.target})}</span>
-                <span class="${pig.phase === 'bot' ? 'turn' : ''}">${gameState.opponentName} · <b>${pig.botScore}</b></span>
+                <span class="${pig.phase === 'bot' ? 'turn' : ''}">${escapeHtml(gameState.opponentName)} · <b>${pig.botScore}</b></span>
             </div>
             <div class="rpg-pig-die">${pig.lastRoll ? dieFaces[pig.lastRoll] : '🎲'}</div>
             <div class="rpg-pig-turn">${t('this_turn')}: <b>${pig.turnTotal}</b></div>
         `);
-        if (pig.message) wrap.append(`<div class="rpg-pig-msg">${pig.message}</div>`);
+        if (pig.message) wrap.append(`<div class="rpg-pig-msg">${escapeHtml(pig.message)}</div>`);
         if (pig.phase === 'player' && !gameState.winner) {
             wrap.append(`
                 <div class="rpg-bj-controls">
@@ -1363,13 +1649,13 @@ function renderGameArea() {
         const w = gameState.whist;
         const redSuit = (s) => (s === '♥' || s === '♦') ? 'red' : '';
         const wrap = $('<div class="rpg-whist-wrap"></div>');
-        wrap.append(`<div class="rpg-whist-info">${t('trump')}: <b class="${redSuit(w.trump)}">${w.trump}</b> &nbsp;·&nbsp; ${t('tricks')} — ${t('you')} <b>${w.playerTricks}</b> : <b>${w.botTricks}</b> ${gameState.opponentName}</div>`);
+        wrap.append(`<div class="rpg-whist-info">${t('trump')}: <b class="${redSuit(w.trump)}">${w.trump}</b> &nbsp;·&nbsp; ${t('tricks')} — ${t('you')} <b>${w.playerTricks}</b> : <b>${w.botTricks}</b> ${escapeHtml(gameState.opponentName)}</div>`);
         wrap.append(`<div class="rpg-whist-bothand">${w.botHand.map(() => '<div class="rpg-card back mini"><span>?</span></div>').join('')}</div>`);
         const tbl = $('<div class="rpg-whist-table"></div>');
         tbl.append(`<div class="rpg-whist-slot">${w.table.bot ? cardHtml(w.table.bot, false) : '<div class="rpg-card empty"></div>'}</div>`);
         tbl.append(`<div class="rpg-whist-slot">${w.table.user ? cardHtml(w.table.user, false) : '<div class="rpg-card empty"></div>'}</div>`);
         wrap.append(tbl);
-        if (w.message) wrap.append(`<div class="rpg-whist-msg">${w.message}</div>`);
+        if (w.message) wrap.append(`<div class="rpg-whist-msg">${escapeHtml(w.message)}</div>`);
         const phand = $('<div class="rpg-whist-hand"></div>');
         const isFollower = w.table.bot !== null;
         const mustFollow = isFollower && w.playerHand.some(c => c.suit === w.ledSuit);
@@ -1382,6 +1668,9 @@ function renderGameArea() {
         });
         wrap.append(phand);
         canvas.append(wrap);
+    }
+    else if (gameState.gameType === 'bottle') {
+        renderBottleArea(canvas);
     }
 
     canvas.append(`
@@ -1401,6 +1690,7 @@ function renderGameArea() {
         else if (gameState.gameType === 'poker') initPoker();
         else if (gameState.gameType === 'pig') initPig();
         else if (gameState.gameType === 'whist') initWhist();
+        else if (gameState.gameType === 'bottle') initBottle();
     });
 
     if (gameState.winner) { $('#rpg-game-summary-btn').show(); $('#rpg-replay-btn').show(); }
@@ -1424,7 +1714,7 @@ function renderGameModal() {
                         <div class="rpg-game-opponent">
                             <img src="${avatarUrl}" class="rpg-game-opp-avatar" onerror="this.style.display='none'">
                             <div>
-                                <div class="rpg-game-opp-name" id="rpg-game-opp-name">${name}</div>
+                                <div class="rpg-game-opp-name" id="rpg-game-opp-name">${escapeHtml(name)}</div>
                                 <div class="rpg-game-opp-status">${t('at_table')}</div>
                             </div>
                         </div>
@@ -1447,6 +1737,16 @@ function renderGameModal() {
     $('#rpg-game-opp-name').text(gameState.opponentName);
     const $oppImg = modal.find('.rpg-game-opp-avatar');
     if (oppAvatar) { $oppImg.attr('src', oppAvatar).show(); } else { $oppImg.hide(); }
+    // restore the table-talk history into a freshly (re)built window
+    const logEl = $('#rpg-game-chat-log');
+    if (logEl.length && logEl.children().length === 0 && gameState.chatLog.length) {
+        gameState.chatLog.forEach(m => {
+            const msgClass = m.sender === 'system' ? 'system' : (m.sender === 'user' ? 'user' : 'bot');
+            const label = (m.sender === 'bot' && m.who && gameState.gameType === 'bottle') ? `<b>${escapeHtml(m.who)}:</b> ` : '';
+            logEl.append(`<div class="rpg-gmsg ${msgClass}">${label}${escapeHtml(m.text)}</div>`);
+        });
+        logEl.scrollTop(logEl[0].scrollHeight);
+    }
     $('.rpg-game-close').off('click').on('click', () => modal.removeClass('visible'));
     $('#rpg-game-send-btn').off('click').on('click', sendGameMessage);
     $('#rpg-game-input-field').off('keypress').on('keypress', (e) => { if (e.which === 13) sendGameMessage(); });
@@ -1469,12 +1769,14 @@ function makeModalDraggable(elmnt, handle) {
     function closeDragElement() { document.onmouseup = null; document.onmousemove = null; }
 }
 
-function addGameChatMessage(sender, text) {
-    gameState.chatLog.push({ sender, text });
+function addGameChatMessage(sender, text, who) {
+    gameState.chatLog.push({ sender, text, who: who || null });
     const log = $('#rpg-game-chat-log');
     if (log.length > 0) {
         const msgClass = sender === 'system' ? 'system' : (sender === 'user' ? 'user' : (sender === 'typing' ? 'bot rpg-typing' : 'bot'));
-        log.append(`<div class="rpg-gmsg ${msgClass}">${escapeHtml(text)}</div>`);
+        // with several characters at the table, show who is talking
+        const label = (sender === 'bot' && who && gameState.gameType === 'bottle') ? `<b>${escapeHtml(who)}:</b> ` : '';
+        log.append(`<div class="rpg-gmsg ${msgClass}">${label}${escapeHtml(text)}</div>`);
         log.scrollTop(log[0].scrollHeight);
     }
 }
@@ -1493,19 +1795,24 @@ async function sendGameMessage() {
 }
 
 function injectGameSummaryToChat() {
-    const charName = gameState.opponentName;
+    const charName = (gameState.gameType === 'bottle' && gameState.bottle)
+        ? gameState.bottle.players.filter(p => !p.isUser).map(p => p.name).join(', ')
+        : gameState.opponentName;
     const gameName = t('gn_' + gameState.gameType);
     let resultWord = t('res_draw');
     if (gameState.winner === 'user') resultWord = t('res_user');
     if (gameState.winner === 'bot') resultWord = t('res_bot', {name: charName});
     const dialogue = gameState.chatLog
         .filter(m => m.sender === 'user' || m.sender === 'bot')
-        .map(m => m.sender === 'user' ? `${userName()}: ${m.text}` : `${charName}: ${m.text}`)
+        .map(m => m.sender === 'user' ? `${userName()}: ${m.text}` : `${m.who || charName}: ${m.text}`)
         .join('\n');
     let summaryText = t('summary_line', {user: userName(), char: charName, game: gameName, result: resultWord});
     if (dialogue) summaryText += `\n\n${dialogue}`;
-    $('#send_textarea').val(summaryText).trigger('input');
+    // append rather than replace — never destroy what the user was typing
+    const cur = $('#send_textarea').val();
+    $('#send_textarea').val((cur ? cur + '\n\n' : '') + summaryText).trigger('input');
     $('#rpg-game-modal').removeClass('visible');
+    gameSession++;
     gameState.active = false;
     gameState.chatLog = [];
     toastr.success(t('result_added'));
@@ -1579,12 +1886,13 @@ function initUI() {
     if (!settings.enabled || !isChatOpen()) { btn.hide(); return; }
     btn.show();
     btn.off('click').on('click', () => {
-        const opponent = getCurrentOpponent();
-        if (gameState.opponentName && gameState.opponentName !== opponent.name) {
-            gameState.active = false;
+        if (!gameState.active) {
+            // no session running: greet whoever spoke last, fresh table talk
+            gameState.opponentName = getCurrentOpponent().name;
             gameState.chatLog = [];
         }
-        gameState.opponentName = opponent.name;
+        // an ongoing game just shows itself again — close the window, play the scene
+        // out in chat, come back, and the bottle is exactly where you left it
         renderGameModal();
         $('#rpg-game-modal').toggleClass('visible');
     });
@@ -1618,6 +1926,7 @@ jQuery(() => {
     initUI();
     eventSource.on(event_types.CHAT_CHANGED, () => {
         initUI();
+        gameSession++;                 // never let old-chat game timers run on
         gameState.active = false;
         $('#rpg-game-modal').remove();
     });
