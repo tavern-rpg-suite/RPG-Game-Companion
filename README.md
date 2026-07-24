@@ -32,12 +32,3 @@ Tap the floating gamepad button, pick a game, and play. Board/card games are ful
 ## 🎭 How the opponent "thinks"
 
 When a match starts, the model quietly picks a **disposition** and **skill** from your character's personality and the current mood — a proud knight might play sharp and fair, a smitten companion might *let* you win, a trickster might palm a card. This only colors the play and the banter; the game logic underneath stays honest so matches still resolve correctly.
-
-## 🔌 Part of the RPG suite
-
-Standalone by design, but sits happily alongside the other RPG modules (Map, Vitals, Equipment, Inventory, Status Bar) as the "downtime / minigame" corner of the set.
-
-## 🩺 Troubleshooting
-
-- **No disposition or commentary.** Those need a working URL / key / model; without them the games still play, just quietly.
-- **Chess won't load.** It pulls chess.js on first use — allow it a moment and a connection.
