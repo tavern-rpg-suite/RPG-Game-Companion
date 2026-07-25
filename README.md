@@ -2,7 +2,7 @@
 
 A SillyTavern extension that lets your character **actually sit down and play games with you** — real, working games (chess, cards, dice and more) played move-by-move, in character, with a personality all their own. They might play fair, secretly go easy on you, or cheekily cheat — and comment on the match the whole way through.
 
-**Version 1.2.0** 
+**Version 1.4.3** 
 
 ---
 
