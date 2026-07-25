@@ -91,7 +91,8 @@
     background: linear-gradient(180deg, rgba(255,253,246,0.5), rgba(120,100,60,0.05));
     border: 1px solid #e2d6ba;
     border-radius: 12px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: flex-start; justify-content: safe center;
     padding: 14px; position: relative; overflow: auto;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
 }
@@ -347,7 +348,7 @@
 /* ============================================================
    SPIN THE BOTTLE
    ============================================================ */
-.rpg-bt-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+.rpg-bt-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; padding: 36px 0 6px; box-sizing: border-box; }
 .rpg-bt-modes { font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .rpg-bt-mode { font-size: 12px; padding: 3px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.05); cursor: pointer; color: inherit; }
 .rpg-bt-mode.sel { border-color: #c9a227; background: rgba(201,162,39,.18); }
@@ -363,6 +364,10 @@
 .rpg-bt-cand { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin: 3px 0; border-radius: 8px; background: rgba(255,255,255,.05); cursor: pointer; width: 100%; }
 .rpg-bt-cand:hover { background: rgba(255,255,255,.1); }
 .rpg-bt-say { font-size: 12px; font-style: italic; text-align: center; max-width: 340px; opacity: .9; padding: 4px 10px; border-left: 2px solid rgba(233, 30, 99, .5); }
+.rpg-bt-own { display: flex; flex-direction: column; gap: 7px; width: 100%; max-width: 340px; }
+.rpg-bt-own textarea { width: 100%; min-height: 58px; box-sizing: border-box; resize: vertical; border-radius: 10px; border: 1px solid rgba(233, 30, 99, .4); background: rgba(255, 253, 246, .75); color: inherit; font: inherit; font-size: 13px; padding: 7px 10px; }
+.rpg-bt-own textarea:focus { outline: none; border-color: rgba(233, 30, 99, .75); }
+.rpg-bt-own-row { display: flex; gap: 7px; justify-content: center; }
 
 /* compact game-select cards for the 2-column menu */
 .rpg-menu-container .rpg-game-select-btn { padding: 9px 10px; font-size: 0.82rem; gap: 7px; }

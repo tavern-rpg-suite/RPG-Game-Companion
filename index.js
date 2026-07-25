@@ -99,6 +99,11 @@ const I18N = {
         bt_wish_gen: 'Thinking of a dare…',
         bt_task_wish: 'Dare from {spinner} to {target}: «{dare}»',
         bt_reroll: '🎲 Another dare',
+        bt_own: '✎ My own dare',
+        bt_ai: '✨ AI dare',
+        bt_own_ph: 'Write the dare yourself…',
+        bt_own_save: 'Set dare',
+        bt_own_cancel: 'Cancel',
         bt_insert: '▶ Play this out in chat',
         bt_next: 'Next ▶',
         bt_line_kiss: '*[Spin the bottle: {spinner}\'s bottle points at {target} — a kiss! Play the scene out.]*',
@@ -190,6 +195,11 @@ const I18N = {
         bt_wish_gen: 'Придумываю желание…',
         bt_task_wish: 'Желание от {spinner} для {target}: «{dare}»',
         bt_reroll: '🎲 Другое желание',
+        bt_own: '✎ Своё желание',
+        bt_ai: '✨ Желание от ИИ',
+        bt_own_ph: 'Напиши желание сама…',
+        bt_own_save: 'Задать желание',
+        bt_own_cancel: 'Отмена',
         bt_insert: '▶ Отыграть в чате',
         bt_next: 'Дальше ▶',
         bt_line_kiss: '*[Бутылочка: бутылочка {spinner} указывает на {target} — поцелуй! Отыграйте эту сцену.]*',
@@ -1266,7 +1276,7 @@ function bottleStart(aiNames) {
     gameSession++;
     const players = [{ name: userName(), isUser: true, token: TABLE_TOKENS[0] }];
     aiNames.slice(0, 5).forEach((n, i) => players.push({ name: n, isUser: false, token: TABLE_TOKENS[(i + 1) % TABLE_TOKENS.length] }));
-    gameState.bottle = { players, turn: 0, mode: 'mix', phase: 'idle', target: null, task: '', dare: '', kind: null, angle: 0, round: 0 };
+    gameState.bottle = { players, turn: 0, mode: 'mix', phase: 'idle', target: null, task: '', dare: '', kind: null, angle: 0, round: 0, manual: false, editing: false };
     gameState.winner = null;
     renderGameArea();
 }
@@ -1285,7 +1295,7 @@ function bottleSpin() {
     const targetAngle = -90 + targetIdx * (360 / n);
     b.angle = (b.angle || 0) + 1080 + ((targetAngle - ((b.angle || 0) % 360)) + 360) % 360 + (Math.random() * 18 - 9);
     b.phase = 'spinning';
-    b.task = ''; b.dare = ''; b.kind = null;
+    b.task = ''; b.dare = ''; b.kind = null; b.manual = false; b.editing = false;
     addGameChatMessage('system', t('bt_spinning', { name: spinner.name }));
     renderGameArea();
     setTimeout(guarded(bottleResolve), 1800);
@@ -1305,9 +1315,10 @@ function bottleResolve() {
         bottleReactions(spinner, target);
         renderGameArea();
     } else {
-        b.task = t('bt_wish_gen');
+        // Default flow: the PLAYER writes the dare; AI generation is one tap away in the editor.
+        b.task = ''; b.dare = ''; b.manual = false; b.editing = true;
         renderGameArea();
-        bottleMakeDare();
+        const ta = document.getElementById('rpg-bt-own-text'); if (ta) ta.focus();
     }
 }
 
@@ -1332,6 +1343,7 @@ Output ONLY JSON: {"dare":""}`;
         dare = String(res && res.dare || '').trim().slice(0, 180);
     } catch (e) { console.error('[RPG Game] dare error:', e); }
     if (!gameState.active || gameState.gameType !== 'bottle' || !gameState.bottle || gameState.bottle.round !== myRound) return;
+    if (gameState.bottle.manual) return;   // the player wrote their own dare while the AI was thinking — theirs wins
     if (!dare) dare = t('bt_task_kiss', { spinner: spinner.name, target: target.name });   // fallback: a classic
     b.dare = dare;
     b.reaction = null;                     // the old quip may not fit the new dare
@@ -1359,7 +1371,9 @@ async function bottleReactions(spinner, target) {
     const bb = gameState.bottle;
     if (!gameState.active || gameState.gameType !== 'bottle' || !bb || bb.round !== myRound) return;   // stale round
     bb.reaction = { who, text: String(text).trim() };
-    renderGameArea();   // show the quote under the task so it's clear it will be sent along
+    // Not re-rendered in the play field: the quip already appears in the side chat (via
+    // generateAiCommentary) — showing it twice was confusing. It is still carried into the
+    // roleplay by "Play this out in chat", and skipping the render keeps an open dare editor alive.
 }
 
 function bottleInsertScene() {
@@ -1379,7 +1393,7 @@ function bottleNext() {
     const b = gameState.bottle;
     if (!b || b.phase !== 'result') return;
     b.turn = (b.turn + 1) % b.players.length;
-    b.phase = 'idle'; b.target = null; b.task = ''; b.dare = ''; b.kind = null; b.reaction = null;
+    b.phase = 'idle'; b.target = null; b.task = ''; b.dare = ''; b.kind = null; b.reaction = null; b.manual = false; b.editing = false;
     renderGameArea();
     const p = b.players[b.turn];
     if (!p.isUser) setTimeout(guarded(bottleSpin), 1100);   // AI players spin on their own
@@ -1406,16 +1420,27 @@ function renderBottleArea(canvas) {
     const cur = b.players[b.turn];
     if (b.phase === 'idle') wrap.append(`<div class="rpg-bt-task">${escapeHtml(cur.isUser ? t('bt_your_turn') : t('bt_turn', { name: cur.name }))}</div>`);
     else if (b.phase === 'spinning') wrap.append(`<div class="rpg-bt-task">${escapeHtml(t('bt_spinning', { name: cur.name }))}</div>`);
+    else if (b.editing) {
+        wrap.append(`<div class="rpg-bt-own">
+            <textarea id="rpg-bt-own-text" maxlength="180" placeholder="${escapeHtml(t('bt_own_ph'))}">${escapeHtml(b.dare || '')}</textarea>
+            <div class="rpg-bt-own-row">
+                <button class="rpg-game-action-btn" id="rpg-bt-own-save">${t('bt_own_save')}</button>
+                <button class="rpg-game-action-btn alt" id="rpg-bt-own-ai">${t('bt_ai')}</button>
+                ${b.dare ? `<button class="rpg-game-action-btn alt" id="rpg-bt-own-cancel">${t('bt_own_cancel')}</button>` : ''}
+            </div></div>`);
+    }
     else if (b.task) {
         wrap.append(`<div class="rpg-bt-task hot">${escapeHtml(b.task)}</div>`);
-        if (b.reaction && b.reaction.text) wrap.append(`<div class="rpg-bt-say"><b>${escapeHtml(b.reaction.who)}:</b> «${escapeHtml(b.reaction.text)}»</div>`);
     }
     // controls
     const ctrl = $('<div class="rpg-bj-controls"></div>');
     if (b.phase === 'idle' && cur.isUser) ctrl.append(`<button class="rpg-game-action-btn" id="rpg-bt-spin"><i class="fa-solid fa-rotate"></i> ${t('bt_spin')}</button>`);
-    if (b.phase === 'result') {
+    if (b.phase === 'result' && !b.editing) {
         ctrl.append(`<button class="rpg-game-action-btn" id="rpg-bt-insert"><i class="fa-solid fa-paper-plane"></i> ${t('bt_insert')}</button>`);
-        if (b.kind === 'wish') ctrl.append(`<button class="rpg-game-action-btn alt" id="rpg-bt-reroll">${t('bt_reroll')}</button>`);
+        if (b.kind === 'wish') {
+            ctrl.append(`<button class="rpg-game-action-btn alt" id="rpg-bt-reroll">${t('bt_reroll')}</button>`);
+            ctrl.append(`<button class="rpg-game-action-btn alt" id="rpg-bt-own">${t('bt_own')}</button>`);
+        }
         ctrl.append(`<button class="rpg-game-action-btn alt" id="rpg-bt-next">${t('bt_next')}</button>`);
     }
     wrap.append(ctrl);
@@ -1424,7 +1449,27 @@ function renderBottleArea(canvas) {
     $('#rpg-bt-spin').on('click', bottleSpin);
     $('#rpg-bt-insert').on('click', bottleInsertScene);
     $('#rpg-bt-next').on('click', bottleNext);
-    $('#rpg-bt-reroll').on('click', () => { const bb = gameState.bottle; if (bb && bb.phase === 'result') { bb.task = t('bt_wish_gen'); bb.reaction = null; renderGameArea(); bottleMakeDare(); } });
+    $('#rpg-bt-reroll').on('click', () => { const bb = gameState.bottle; if (bb && bb.phase === 'result') { bb.task = t('bt_wish_gen'); bb.reaction = null; bb.manual = false; renderGameArea(); bottleMakeDare(); } });
+    $('#rpg-bt-own').on('click', () => { const bb = gameState.bottle; if (bb && bb.phase === 'result') { bb.editing = true; renderGameArea(); $('#rpg-bt-own-text').trigger('focus'); } });
+    $('#rpg-bt-own-cancel').on('click', () => { const bb = gameState.bottle; if (bb) { bb.editing = false; renderGameArea(); } });
+    $('#rpg-bt-own-ai').on('click', () => {
+        const bb = gameState.bottle; if (!bb || bb.phase !== 'result') return;
+        bb.editing = false; bb.manual = false; bb.reaction = null;
+        bb.task = t('bt_wish_gen');
+        renderGameArea();
+        bottleMakeDare();
+    });
+    $('#rpg-bt-own-save').on('click', () => {
+        const bb = gameState.bottle; if (!bb || bb.phase !== 'result') return;
+        const v = String($('#rpg-bt-own-text').val() || '').trim().slice(0, 180);
+        if (!v) return;
+        const sp = bb.players[bb.turn], tg = bb.players[bb.target];
+        bb.dare = v; bb.manual = true; bb.editing = false; bb.reaction = null;
+        bb.task = t('bt_task_wish', { spinner: sp.name, target: tg.name, dare: v });
+        addGameChatMessage('system', bb.task);
+        renderGameArea();
+        bottleReactions(sp, tg);   // the character reacts to YOUR dare in the side chat
+    });
 }
 
 /* ============================================================
