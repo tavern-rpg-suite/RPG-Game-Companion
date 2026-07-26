@@ -24,7 +24,7 @@ You can easily select and play any of the following interactive games from the m
 
 ## ✨ Features
 
-* 🎭 **Hidden Dispositions** — Before a match, the AI secretly determines its approach based on the character's personality and the current mood (e.g., playing fair, letting you win, or subtly cheating), as well as a skill level from 1 to 5.
+* 🎭 **Hidden Dispositions** — Before a match, the AI secretly determines its approach based on the character's personality and the current mood (e.g., playing fair, letting you win, or subtly cheating).
 * 💬 **Dynamic Commentary** — Opponents will cheer, react, or banter throughout the game in their own in-character voice.
 * 🧠 **Context Awareness** — The extension reads your recent chat messages to ensure the companion's attitude matches the current state of your story.
 * 🕹️ **One-Tap Launcher** — Access the game menu instantly inside any chat via a floating gamepad button.
