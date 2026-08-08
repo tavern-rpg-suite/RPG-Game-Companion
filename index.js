@@ -9,6 +9,7 @@ const defaultSettings = {
     apiKey: '',
     model: 'google/gemma-4-31b-it',
     temperature: 0.8,
+    strictJson: true,
     contextMessages: 10,
     language: 'en'
 };
@@ -282,15 +283,81 @@ function saveSettings() { extension_settings[MODULE_NAME] = settings; saveSettin
 
 function userName() { const c = getContext(); return (c && c.name1) ? c.name1 : 'Player'; }
 
+/* ------------------------------------------------------------
+   ENDPOINT HANDLING — reaching the server only. Nothing about the games,
+   the companion's behaviour, its commentary or any prompt changes here.
+   1. An empty key falls back to Tavern RPG Engine's. An address YOU typed always
+      wins: borrowing takes only what is missing, never the URL. A local backend
+      needs no key, so a placeholder is used rather than a borrowed one.
+   2. OpenAI-style backends live under /v1; without it LM Studio and KoboldCpp
+      reject the path outright.
+   3. response_format is an OpenAI parameter. KoboldCpp turns it into a grammar
+      forbidding anything but an object, and a model opening with "[" bails out
+      with EOS. It is already optional here — now it is also skipped for local
+      backends, where it does harm and no good.
+   ------------------------------------------------------------ */
+const KEY_SOURCES = ['tavern_rpg_engine'];
+function normalizeBase(url) {
+    let u = String(url || '').trim().replace(/\s+/g, '');
+    if (!u) return u;
+    u = u.replace(/\/+$/, '');
+    u = u.replace(/\/(chat\/completions|completions|images|images\/generations|embeddings)$/i, '');
+    if (!/\/v\d+($|\/)/i.test(u)) u += '/v1';
+    return u;
+}
+function isLocalEndpoint(url) {
+    const u = String(url || '').toLowerCase();
+    if (!u) return false;
+    return /(^|\/\/)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|host\.docker\.internal)([:/]|$)/.test(u)
+        || /:(5001|5000|8080|8000|1234|11434|5002)(\/|$)/.test(u)
+        || /192\.168\.|10\.\d+\.|172\.(1[6-9]|2\d|3[01])\./.test(u);
+}
+function wantsStrictJson(url) {
+    if (settings.strictJson === false) return false;
+    return !isLocalEndpoint(url);
+}
+function borrowedRaw() {
+    for (const src of KEY_SOURCES) {
+        if (src === MODULE_NAME) continue;
+        try {
+            const x = extension_settings[src];
+            if (x && x.apiKey && x.model) return { url: x.baseUrl, key: x.apiKey, model: x.model, from: src };
+        } catch (e) { /* a neighbour with broken settings must not break us */ }
+    }
+    return { url: '', key: '', model: '', from: null };
+}
+function apiConf() {
+    const own = String(settings.baseUrl || '').trim();
+    const ownKey = String(settings.apiKey || '').trim();
+    const ownModel = String(settings.model || '').trim();
+    if (own) {
+        const local = isLocalEndpoint(own);
+        const b = (ownKey && ownModel) ? { key: '', model: '', from: null } : borrowedRaw();
+        return {
+            url: own,
+            key: ownKey || (local ? 'local' : b.key),
+            model: ownModel || (local ? '' : b.model),
+            from: ownKey ? null : (local ? null : b.from)
+        };
+    }
+    if (ownKey && ownModel) return { url: '', key: ownKey, model: ownModel, from: null };
+    const b = borrowedRaw();
+    return b.key ? b : { url: '', key: ownKey, model: ownModel, from: null };
+}
+function apiKey() { return apiConf().key || ''; }
+function apiUrl() { return normalizeBase(apiConf().url) || 'https://openrouter.ai/api/v1'; }
+function apiModel() { return apiConf().model || ''; }
+function borrowedFrom() { return apiConf().from; }
+
 // === SHARED API CALL ===
 async function callApi(messages, { json = false, maxTokens = 120 } = {}) {
-    if (!settings.apiKey) throw new Error('No API key');
-    const url = (settings.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '') + '/chat/completions';
-    const body = { model: settings.model, messages, temperature: settings.temperature, max_tokens: maxTokens };
-    if (json) body.response_format = { type: 'json_object' };
+    if (!apiKey()) throw new Error('No API key');
+    const url = apiUrl() + '/chat/completions';
+    const body = { model: apiModel(), messages, temperature: settings.temperature, max_tokens: maxTokens };
+    if (json && wantsStrictJson(url)) body.response_format = { type: 'json_object' };
     const r = await fetch(url, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${settings.apiKey.trim()}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${apiKey().trim()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
     });
     if (!r.ok) throw new Error('API ' + r.status);
@@ -301,7 +368,7 @@ async function callApi(messages, { json = false, maxTokens = 120 } = {}) {
 // === HIDDEN DIFFICULTY (personality + context) ===
 async function determineDisposition() {
     gameState.disposition = { mode: 'fair', skill: 3, reason: '' };
-    if (!settings.apiKey) return;
+    if (!apiKey()) return;
     try {
         const context = getContext();
         const char = characters.find(c => c.name === gameState.opponentName) || characters[context.characterId];
@@ -342,7 +409,7 @@ Output ONLY JSON: {"mode":"fair","skill":3,"reason":"..."}`;
 // === AI COMMENTATOR ===
 let lastCommentAt = 0;
 async function generateAiCommentary(gameEvent, force = false, speaker = null) {
-    if (!settings.apiKey) return;
+    if (!apiKey()) return;
     const now = Date.now();
     if (!force) {
         if (now - lastCommentAt < 6000) return;   // no more than once per ~6s
