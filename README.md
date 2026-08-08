@@ -2,7 +2,7 @@
 
 An extension for SillyTavern that allows your AI companions to play real, interactive games with you. Matches are played move-by-move, in-character, and feature reactive commentary tailored to your companion's personality and mood.
 
-**Version 1.5.1**
+**Version 1.5.2**
 
 ---
 
