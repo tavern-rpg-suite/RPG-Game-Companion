@@ -1605,6 +1605,10 @@ function renderGameArea() {
         const board = $('<div class="rpg-chess-board"></div>');
         const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
         const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+        // Sixty-four separate inserts and sixty-four separate listeners became one of
+        // each. The square's name rides on the element, so the click resolves to the
+        // same handleChessClick call it always did.
+        const squares = [];
         for (let row = 0; row < 8; row++) {
             for (let col = 0; col < 8; col++) {
                 const sqName = files[col] + ranks[row];
@@ -1616,19 +1620,23 @@ function renderGameArea() {
                     const symbol = CHESS_PIECE_SYMBOLS[piece.color === 'w' ? piece.type.toUpperCase() : piece.type];
                     pieceHtml = `<span class="rpg-chess-piece ${piece.color === 'w' ? 'white' : 'black'}">${symbol}</span>`;
                 }
-                const sq = $(`<div class="rpg-chess-square ${isDark ? 'dark' : 'light'} ${isSel ? 'selected' : ''}">${pieceHtml}</div>`);
-                sq.on('click', () => handleChessClick(sqName));
-                board.append(sq);
+                squares.push(`<div class="rpg-chess-square ${isDark ? 'dark' : 'light'} ${isSel ? 'selected' : ''}" data-sq="${sqName}">${pieceHtml}</div>`);
             }
         }
+        board.html(squares.join(''));
+        board.on('click', '.rpg-chess-square', function () {
+            handleChessClick(this.dataset.sq);
+        });
         canvas.append(board);
     }
     else if (gameState.gameType === 'ttt') {
         const grid = $('<div class="rpg-ttt-grid"></div>');
-        gameState.tttBoard.forEach((cell, i) => {
-            const el = $(`<div class="rpg-ttt-cell ${cell ? 'taken ' + cell.toLowerCase() : ''}">${cell || ''}</div>`);
-            el.on('click', () => handleTttClick(i));
-            grid.append(el);
+        // Same treatment as the other boards: one insert, one handler.
+        grid.html(gameState.tttBoard.map((cell, i) =>
+            `<div class="rpg-ttt-cell ${cell ? 'taken ' + cell.toLowerCase() : ''}" data-ttt="${i}">${cell || ''}</div>`
+        ).join(''));
+        grid.on('click', '.rpg-ttt-cell', function () {
+            handleTttClick(parseInt(this.dataset.ttt, 10));
         });
         canvas.append(grid);
     }
@@ -1636,12 +1644,21 @@ function renderGameArea() {
         const container = $('<div class="rpg-bs-container"></div>');
         const grids = $('<div class="rpg-bs-grids"></div>');
         const userGrid = $(`<div class="rpg-bs-grid-wrapper"><div class="rpg-bs-grid-title">${t('your_fleet')}</div><div class="rpg-bs-grid"></div></div>`);
-        gameState.bsUserGrid.forEach((cell) => { userGrid.find('.rpg-bs-grid').append(`<div class="rpg-bs-cell ${cell || ''}"></div>`); });
+        // The lookup used to happen inside the loop, so the same element was searched
+        // for a hundred times over. Found once, and the cells are built as one string.
+        userGrid.find('.rpg-bs-grid').html(
+            gameState.bsUserGrid.map(cell => `<div class="rpg-bs-cell ${cell || ''}"></div>`).join('')
+        );
         const botGrid = $(`<div class="rpg-bs-grid-wrapper"><div class="rpg-bs-grid-title">${t('enemy_grid')}</div><div class="rpg-bs-grid"></div></div>`);
-        gameState.bsBotGrid.forEach((cell, i) => {
-            const el = $(`<div class="rpg-bs-cell ${cell === 'miss' || cell === 'hit' ? cell : ''}"></div>`);
-            el.on('click', () => handleBsClick(i));
-            botGrid.find('.rpg-bs-grid').append(el);
+        // Built as one string and given one handler for the whole grid instead of a
+        // hundred separate inserts and a hundred separate listeners. The cell index
+        // rides on the element, so the click resolves to exactly the same call.
+        const botCells = botGrid.find('.rpg-bs-grid');
+        botCells.html(gameState.bsBotGrid.map((cell, i) =>
+            `<div class="rpg-bs-cell ${cell === 'miss' || cell === 'hit' ? cell : ''}" data-bs="${i}"></div>`
+        ).join(''));
+        botCells.on('click', '.rpg-bs-cell', function () {
+            handleBsClick(parseInt(this.dataset.bs, 10));
         });
         grids.append(userGrid).append(botGrid);
         container.append(grids);
@@ -1866,19 +1883,49 @@ function renderGameModal() {
 }
 
 function makeModalDraggable(elmnt, handle) {
-    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    handle.addEventListener('mousedown', dragMouseDown);
-    function dragMouseDown(e) {
+    if (!handle) return;
+    handle.onmousedown = (e) => {
         if (e.target.closest('.rpg-game-close')) return;
-        e.preventDefault(); pos3 = e.clientX; pos4 = e.clientY;
-        document.onmouseup = closeDragElement; document.onmousemove = elementDrag;
-    }
-    function elementDrag(e) {
         e.preventDefault();
-        pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY; pos3 = e.clientX; pos4 = e.clientY;
-        elmnt.style.top = (elmnt.offsetTop - pos2) + "px"; elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
-    }
-    function closeDragElement() { document.onmouseup = null; document.onmousemove = null; }
+
+        /* Remember how far the pointer is from the window's corner and keep that
+           distance for the whole drag. transform is left alone — an opening animation
+           or a fit-to-width scale uses it, and writing there as well makes them fight.
+
+           offsetTop and offsetLeft used to be read on every mouse move, and each read
+           makes the browser lay out the whole page before it can answer. Measured once
+           here; the writes are batched into a single animation frame. */
+        const rect = elmnt.getBoundingClientRect();
+        const shiftX = e.clientX - rect.left;
+        const shiftY = e.clientY - rect.top;
+
+        let x = rect.left, y = rect.top, queued = false;
+
+        const paint = () => {
+            queued = false;
+            elmnt.style.left = x + 'px';
+            elmnt.style.top = y + 'px';
+        };
+
+        elmnt.style.left = rect.left + 'px';
+        elmnt.style.top = rect.top + 'px';
+
+        const onMove = (ev) => {
+            ev.preventDefault();
+            x = ev.clientX - shiftX;
+            y = ev.clientY - shiftY;
+            if (!queued) { queued = true; requestAnimationFrame(paint); }
+        };
+
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            paint();
+        };
+
+        document.addEventListener('mousemove', onMove, { passive: false });
+        document.addEventListener('mouseup', onUp);
+    };
 }
 
 function addGameChatMessage(sender, text, who) {
