@@ -1,5 +1,7 @@
 # 🎮 RPG Game Companion
 
+<img width="1672" height="941" alt="4108f244-0063-42cf-a1fa-427213826078" src="https://github.com/user-attachments/assets/3bad6a7f-ac22-46d4-9bb4-0af582cea9a4" />
+
 An extension for SillyTavern that allows your AI companions to play real, interactive games with you. Matches are played move-by-move, in-character, and feature reactive commentary tailored to your companion's personality and mood.
 
 **Version 1.5.2**
@@ -50,3 +52,8 @@ You can easily select and play any of the following interactive games from the m
 3. Adjust the **Messages to analyze personality** setting to control how much recent chat history the AI reads before deciding its playstyle.
 
 Tap the floating gamepad icon in any active chat, select your game, and start playing!
+
+---
+## ✨ Screenshots
+
+<img width="1880" height="851" alt="Preview-RPG Game Companion" src="https://github.com/user-attachments/assets/ae60abd4-a98a-4fdd-96ba-d27335aa5160" />
