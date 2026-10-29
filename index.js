@@ -269,7 +269,8 @@ function guarded(fn) {
 function loadChessScript() {
     if (typeof Chess === 'undefined') {
         const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js';
+        // chess.js 0.10.3 (BSD-2, Jeff Hlywa) ships with the extension: no code from a third-party server
+        script.src = new URL('chess.js', import.meta.url).href;
         script.onload = () => console.log("[RPG Game] chess.js loaded.");
         document.head.appendChild(script);
     }
@@ -493,7 +494,7 @@ function initChessGame() {
         // no CDN access (offline SillyTavern) used to leave "getting ready…" spinning forever
         if (++chessLoadTries > 50) {
             chessLoadTries = 0;
-            toastr.error('chess.js could not be loaded (no access to cdnjs.cloudflare.com?)');
+            toastr.error('chess.js could not be loaded (the chess.js file is missing from the extension folder?)');
             gameState.active = false; renderGameArea(); return;
         }
         setTimeout(initChessGame, 150); return;
