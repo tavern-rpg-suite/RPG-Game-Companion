@@ -1981,6 +1981,39 @@ function injectGameSummaryToChat() {
 /* ============================================================
    SETTINGS / BUTTON / INIT
    ============================================================ */
+
+/* The settings in framed groups, the way RPG Vitals has them: each <h4> heading and what follows it,
+   up to the next heading, go into one frame. Nothing is rebuilt — the same elements are moved, so every
+   id and every handler stays as it was. A nested drawer stands on its own; the old rulers go. */
+function frameSettings(root) {
+    if (!root) return;
+    root.querySelectorAll('.inline-drawer-content').forEach(content => {
+        if (content.dataset.framed) return;
+        content.dataset.framed = '1';
+        let box = null;
+        [...content.children].forEach(el => {
+            if (el.tagName === 'H4') {
+                box = document.createElement('div');
+                box.className = 'tsx-frame';
+                content.insertBefore(box, el);
+                el.classList.add('tsx-framehead');
+                box.appendChild(el);
+                return;
+            }
+            if (el.tagName === 'HR' && el.classList.contains('sysHR')) { el.remove(); return; }
+            // a drawer inside the settings: framed like the rest, still opening and closing
+            if (el.classList.contains('inline-drawer')) { el.classList.add('tsx-subframe'); box = null; return; }
+            // what follows a drawer, before the next heading, is not left loose between frames
+            if (!box && content.querySelector(':scope > .tsx-frame, :scope > .tsx-subframe')) {
+                box = document.createElement('div');
+                box.className = 'tsx-frame tsx-loose';
+                content.insertBefore(box, el);
+            }
+            if (box) box.appendChild(el);
+        });
+    });
+}
+
 function renderSettingsUI() {
     const html = `
 <div class="extension_settings rpg-game-settings">
@@ -2012,6 +2045,7 @@ function renderSettingsUI() {
     </div>
 </div>`;
     $('#extensions_settings').append(html);
+    frameSettings(document.querySelector('.rpg-game-settings'));
     $('.rpg-game-settings .rpg-game-toggle').on('click', function () {
         $(this).next('.inline-drawer-content').slideToggle();
         $(this).find('.inline-drawer-icon').toggleClass('down up');
