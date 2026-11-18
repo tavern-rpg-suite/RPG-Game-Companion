@@ -73,7 +73,7 @@ const I18N = {
         surrendered: 'You surrendered and ended the game.',
         thinking: '{name} is thinking...',
         menu_title: 'What shall we play with {name}?',
-        g_chess: 'Chess', g_bj: '21 (Blackjack)', g_poker: 'Poker (5-card)', g_whist: 'Whist',
+        btn_games: 'Games with the character', g_chess: 'Chess', g_bj: '21 (Blackjack)', g_poker: 'Poker (5-card)', g_whist: 'Whist',
         g_bs: 'Battleship (6×6)', g_ttt: 'Tic-Tac-Toe', g_rps: 'Rock-Paper-Scissors', g_pig: 'Dice "Pig"',
         menu: 'Menu', surrender: 'Surrender',
         your_fleet: 'Your fleet', enemy_grid: 'Enemy grid',
@@ -169,7 +169,7 @@ const I18N = {
         surrendered: 'Ты сдался и завершил игру.',
         thinking: '{name} думает...',
         menu_title: 'Во что сыграем с {name}?',
-        g_chess: 'Шахматы', g_bj: '21 (блэкджек)', g_poker: 'Покер (5 карт)', g_whist: 'Вист',
+        btn_games: 'Игры с персонажем', g_chess: 'Шахматы', g_bj: '21 (блэкджек)', g_poker: 'Покер (5 карт)', g_whist: 'Вист',
         g_bs: 'Морской бой (6×6)', g_ttt: 'Крестики-нолики', g_rps: 'Камень-ножницы-бумага', g_pig: 'Кости «Свинья»',
         menu: 'Меню', surrender: 'Сдаться',
         your_fleet: 'Твой флот', enemy_grid: 'Поле противника',
@@ -2073,9 +2073,10 @@ function initUI() {
     }
     let btn = $('#rpg-game-btn');
     if (btn.length === 0) {
-        btn = $(`<div class="rpg-floating-btn" id="rpg-game-btn" title="Games with the bot" style="position:static; width:50px; height:50px; margin:0; display:flex;"><i class="fa-solid fa-gamepad"></i></div>`);
+        btn = $(`<div class="rpg-floating-btn" id="rpg-game-btn" style="position:static; width:50px; height:50px; margin:0; display:flex;"><i class="fa-solid fa-gamepad"></i></div>`);
         container.prepend(btn);
     }
+    btn.attr('title', t('btn_games'));   // in the screen's language (it was always English)
     $('#rpg-game-btn-standalone').remove();
     if (!settings.enabled || !isChatOpen()) { btn.hide(); return; }
     btn.show();
